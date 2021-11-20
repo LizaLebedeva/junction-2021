@@ -9,13 +9,14 @@ class ModelGreed:
         self.time_resolution = time_resolution
         self.top_near_size = top_near_size
         self.series = None
+        self.cache = {}
 
     def fit(self, df_events):
+        self.cache = {}
         df = df_events.copy()
         df.timestamp = df.timestamp.dt.floor(self.time_resolution)
         min_time = df.timestamp.min()
         max_time = df.timestamp.max()
-
         self.series = pd.DataFrame()
         self.series['time'] = pd.date_range(start=min_time, end=max_time, freq=self.time_resolution)
         self.series = self.series.set_index('time')
@@ -40,7 +41,7 @@ class ModelGreed:
             ref_position = device_to_map.position
             # Find know near devices
             edges_space = []
-            for device in self.get_know_devices(device):
+            for device in self.get_know_devices(devices):
                 dist = ((device.position[0] - ref_position[0])**2 + (device.position[1] - ref_position[1])**2)**0.5
                 edges_space.append([device, dist])
             near_devices = sorted(edges_space, key=lambda x:x[1])[:self.top_near_size]        
@@ -65,4 +66,7 @@ class ModelGreed:
         return devices
 
     def _calculate_similarity(self, ref_decide_id, candidate_device_id):
-        return pearsonr(self.series[ref_decide_id].values, self.series[candidate_device_id].values)[0]
+        _key = tuple(sorted([ref_decide_id, candidate_device_id]))
+        if _key not in self.cache:
+            self.cache[_key] = pearsonr(self.series[ref_decide_id].values, self.series[candidate_device_id].values)[0]
+        return self.cache[_key]
