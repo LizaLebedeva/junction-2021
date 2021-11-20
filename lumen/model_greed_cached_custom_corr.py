@@ -1,6 +1,7 @@
 from copy import deepcopy
 import pandas as pd
 from scipy.stats.stats import pearsonr
+import pickle
 
 
 ### Some ideas for combined correlation
@@ -17,9 +18,15 @@ class EventCorrelator(object):
     def time_series_similarity(self, device_id1, device_id2):
         pass
 
+    def offload_tmp_data(self):
+        pass
+
 class PearsonCorrelator(EventCorrelator):
     def __init__(self, series):
         self.series=series
+
+    def offload_tmp_data(self):
+        self.series = None    
 
     def time_series_similarity(self, device_id1, device_id2):
         return pearsonr(self.series[device_id1].values, self.series[device_id2].values)[0]
@@ -42,15 +49,23 @@ class CombinedCorrelator(object):
                 _events = list(df[df.deviceid == device_id].timestamp)
                 series[device_id] = 0
                 series[device_id].loc[_events] = 1
-            self.time_sliced_series[time_resolution] = series   
+            self.time_sliced_series[time_resolution] = series
+
+    def offload_tmp_data(self):
+        self.time_sliced_series = None
+        self.df_events = None
+
+    def overwrite_weights(self, time_buckets_config):
+        self.time_buckets_config = time_buckets_config
 
     def time_series_similarity(self, device_id1, device_id2):
         combined = 0
         for time_resolution, weight in self.time_buckets_config.items():
             bucketed_series = self.time_sliced_series[time_resolution]
             correlation = pearsonr(bucketed_series[device_id1].values, bucketed_series[device_id2].values)[0]
-            print(f"resolution {time_resolution} corr {correlation}")
+            # print(f"resolution {time_resolution} corr {correlation}")
             combined += correlation * weight
+        # print(f"total {combined}")
         return combined
     
 class DummySimultaneousFireCorrelator(EventCorrelator):
@@ -107,6 +122,12 @@ class ModelGreedCachedCustomCorrelation:
         self.cache = {}
         self.correlator = correlator
 
+    def store_model(self, filename):
+        self.correlator.offload_tmp_data()
+        print(self.correlator.time_sliced_series)
+        with open(filename, 'wb') as model_file:
+            pickle.dump(self, model_file)
+        
 
     def compute_correlations(self, devices_list):
         self.cache = {}
