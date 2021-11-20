@@ -1,0 +1,136 @@
+{% extends "frame.html" %}
+{% block content %}
+
+<br/>
+<div id="mapid"></div>
+
+<br/>
+<hr/>
+<button onclick='load_site_data("site_1");' style='background-color: #f0f0f0;'>Site 1</button>
+<button onclick='load_site_data("site_2");' style='background-color: #f0f0f0;'>Site 2</button>
+<button onclick='load_site_data("site_3");' style='background-color: #f0f0f0;'>Site 3</button>
+<button onclick='load_site_data("site_4");' style='background-color: #f0f0f0;'>Site 4</button>
+<button onclick='load_site_data("site_5");' style='background-color: #f0f0f0;'>Site 5</button>
+
+{% endblock %}
+{% block script %}
+<script>
+
+var map = L.map('mapid').setView([80, -100], 3);
+var circles = [];
+
+
+function load_site_data(site_name){
+    var api_uri = "/load_memory_database/"+site_name;
+    $.ajax({
+        url: api_uri,
+        dataType: 'json',
+        async: true,
+        success: function(resp) {
+            // Reload page
+            location.reload();
+        }
+    });
+}
+
+function add_devices(){
+    var zoom = map.getZoom();
+    var api_uri = "/devices/"+zoom;
+    $.ajax({
+        url: api_uri,
+        dataType: 'json',
+        async: true,
+        success: function(resp) {
+            var devices = resp.devices;
+            for (var k=0; k < devices.length; k++) {
+                // Extract data
+                var pos_x = devices[k].x;
+                var pos_y = devices[k].y;
+                var device_id = devices[k].device_id;
+                var real_device_id = devices[k].real_device_id;
+                var scale = devices[k].scale;
+                var color = devices[k].color;
+                // Convert position
+                var pointXY = [pos_x, pos_y];
+                var pointLatLon = map.unproject(pointXY, zoom);
+                var point_properties = {
+                    color: color,
+                    fillColor: color,
+                    fillOpacity: 0.4,
+                    radius: 8000
+                };
+                // Add device
+                var circle = L.circle(pointLatLon,point_properties).addTo(map);
+                circles.push(circle);
+                // Bind recommender
+                var pop_template = "<b>Device ID: " + device_id + "</b>";
+                pop_template += "<br/><br/><div id="+real_device_id+"></div><br/>";
+                pop_template += "<i>real device id: " + real_device_id + "</i>";
+                circle.bindPopup(pop_template, {minWidth : 400});
+            }
+        }
+    });
+}
+
+function remove_devices(){
+    var total_elements = circles.length;
+    for (var k=0; k <total_elements ; k++) {
+        var circle = circles.pop();
+        map.removeLayer(circle);
+    }
+}
+
+function confirm_recommendation(real_device_id, device_id, call_back){
+    console.log("... confirming: ", real_device_id, device_id);
+    var api_uri = "/checked_id/"+real_device_id+"/"+device_id;
+    $.ajax({
+        url: api_uri,
+        dataType: 'json',
+        async: true,
+        success: function(resp) {
+            remove_devices();
+            add_devices();
+        }
+    });
+}
+
+
+$(function() {
+
+    map.on('popupopen', function(e) {
+      var marker = e.popup._source._popup._content;
+      var real_device_id = $(marker)[3].id;
+      var api_uri = "/recommendations/"+real_device_id;
+      $.ajax({
+            url: api_uri,
+            dataType: 'json',
+            async: true,
+            success: function(resp) {
+                var recommender = resp.recommender;
+                var recs_block = "<table border='0' width='100%' cellspacing='5' cellpadding='5'>";
+                for (var k=0; k < recommender.length; k++) {
+                    var device_id = recommender[k];
+                    recs_block += "<tr>";
+                    recs_block += "<td> <b>Device: "+device_id+"</b> </td>";
+                    recs_block += "<td><button style='background-color: #f0f0ff;'>Check</button></td>";
+                    recs_block += "<td><button onclick='confirm_recommendation("+real_device_id+","+device_id+");' style='background-color: #a0ffa0;'>Confirm</button></td>";
+                    recs_block += "</tr>"
+                }
+                recs_block += "</table>"
+                $("#"+real_device_id).html(recs_block);
+            }
+        });
+    });
+
+    var tms_repo_layer = L.tileLayer('tiles/{z}/{x}/{y}', 
+        {
+            maxZoom: 8,
+            tileSize: 64,
+            noWrap: true
+        }).addTo(map);
+    
+    // Small hack \o/
+    add_devices();
+});
+</script>    
+{% endblock %}
