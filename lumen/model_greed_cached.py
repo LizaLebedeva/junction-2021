@@ -4,33 +4,35 @@ from scipy.stats.stats import pearsonr
 
 class ModelGreedCached:
 
-    def __init__(self, devices, time_resolution='10s', top_near_size=3):
-        self.devices = devices
+    def __init__(self, time_resolution='10s', top_near_size=3):
         self.time_resolution = time_resolution
         self.top_near_size = top_near_size
         self.series = None
-        self.cache = None
+        self.cache = {}
+        self.devices = None
 
 
     def compute_correlations(self, devices_list):
+        self.cache = {}
         device_count = len(devices_list)
         for i in range(device_count):
             ref_device = devices_list[i]
             for j in range(i, device_count):
-                second_device = devices_list[i]
+                second_device = devices_list[j]
                 correlation = self._calculate_similarity(ref_device, second_device)
                 dict_key = self.get_dict_key_for_cache_from_ids(ref_device, second_device)
-
-        self.cache = {}
+                self.cache[dict_key] = correlation
+               # print(f'Stored correlation {correlation} for {dict_key}')
 
     def get_dict_key_for_cache_from_ids(self, id1, id2):
-        return sorted([id1, id2])
+        ordered = sorted([id1, id2])
+        dict_key = tuple(i for i in ordered)
+        return dict_key
 
     def get_correlation(self, device1, device2):
-        return self.cache[self.get_dict_key_for_cache_from_ids(device1, device2)]
+        return self.cache[self.get_dict_key_for_cache_from_ids(device1, device2)]        
 
     def fit(self, df_events):
-        
         df = df_events.copy()
         df.timestamp = df.timestamp.dt.floor(self.time_resolution)
         min_time = df.timestamp.min()
@@ -44,8 +46,7 @@ class ModelGreedCached:
             self.series[device_id] = 0
             self.series[device_id].loc[_events] = 1
 
-        self.compute_correlations(df.deviceid.unique())
-
+        self.compute_correlations(df_events.deviceid.unique())
 
     def get_unknown_devices(self):
         return [device for device in self.devices if not device.has_device_id()]
@@ -53,7 +54,8 @@ class ModelGreedCached:
     def get_know_devices(self):
         return [device for device in self.devices if device.has_device_id()]
 
-    def map_unknowns(self, device_id_candidates):
+    def map_unknowns(self, devices, device_id_candidates):
+        self.devices = devices
         # make a copy
         device_id_candidates = set([x for x in device_id_candidates])
         unknown_devices = self.get_unknown_devices()
