@@ -46,7 +46,7 @@ class CombinedCorrelator(object):
 
     def time_series_similarity(self, device_id1, device_id2):
         combined = 0
-        for time_resolution, weight in self.time_buckets_config:
+        for time_resolution, weight in self.time_buckets_config.items():
             bucketed_series = self.time_sliced_series[time_resolution]
             correlation = pearsonr(bucketed_series[device_id1].values, bucketed_series[device_id2].values)[0]
             print(f"resolution {time_resolution} corr {correlation}")
