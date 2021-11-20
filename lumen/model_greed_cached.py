@@ -1,5 +1,69 @@
+from copy import deepcopy
 import pandas as pd
 from scipy.stats.stats import pearsonr
+
+
+### Some ideas for combined correlation
+def timeseries_from_pandas(df, device_id):
+    sensor_events = df[df.deviceid==device_id]
+    return sensor_events.timestamp.tolist()
+
+def bucketed_time_series(df, device_id, resolution):
+    sensor_events = df[df.deviceid==device_id]
+    return sensor_events['timestamp'].dt.floor(resolution).tolist()
+    
+
+class EventCorrelator(object):
+    def time_series_distance(self, ts1, ts2):
+        pass
+    
+class DummySimultaneousFireCorrelator(EventCorrelator):
+    increment_when_match = None
+    
+    def __init__(self, increment_when_match=1):
+        self.increment_when_match=increment_when_match
+        
+    
+    def time_series_distance(self, ts1, ts2):
+        episodes = max(len(ts1), len(ts2))
+        matches = 0
+        left = 0
+        right = 0
+        while left < len(ts1) and right < len(ts2):
+            if ts1[left] == ts2[right]:
+                matches += self.increment_when_match
+                left +=1 
+                right +=1
+            elif ts1[left] < ts2[right]:
+                left +=1 
+            elif ts1[left] > ts2[right]:
+                right +=1
+                
+        return matches / episodes
+
+class DummyCorrelator2(EventCorrelator):
+    def time_series_distance(self, ts1, ts2):
+        print("Dummy")
+
+class CombinedCorrelator(object):
+    def time_series_distance(self, df, device1, device2):
+        one_sec_correlator = DummySimultaneousFireCorrelator(increment_when_match=5)
+        five_sec_correlator = DummySimultaneousFireCorrelator(increment_when_match=2)
+        ts_one_sec_1 = bucketed_time_series(df, device1, '1s')
+        ts_one_sec_2 = bucketed_time_series(df, device2, '1s')
+        one_sec_corr = one_sec_correlator.time_series_distance(ts_one_sec_1, ts_one_sec_2)
+        ts_five_sec_1 = bucketed_time_series(df, device1, '5s')
+        ts_five_sec_2 = bucketed_time_series(df, device2, '5s')
+        five_sec_corr = five_sec_correlator.time_series_distance(ts_five_sec_1, ts_five_sec_2)
+        
+        ts_10_sec_1 = bucketed_time_series(df, device1, '10s')
+        ts_10_sec_2 = bucketed_time_series(df, device2, '10s')
+        ten_sec_corr = five_sec_correlator.time_series_distance(ts_10_sec_1, ts_10_sec_2)
+        
+        return (one_sec_corr, five_sec_corr, ten_sec_corr)
+
+
+###
 
 
 class ModelGreedCached:
@@ -9,7 +73,6 @@ class ModelGreedCached:
         self.top_near_size = top_near_size
         self.series = None
         self.cache = {}
-        self.devices = None
 
 
     def compute_correlations(self, devices_list):
@@ -48,23 +111,23 @@ class ModelGreedCached:
 
         self.compute_correlations(df_events.deviceid.unique())
 
-    def get_unknown_devices(self):
-        return [device for device in self.devices if not device.has_device_id()]
+    def get_unknown_devices(self, devices):
+        return [device for device in devices if not device.has_device_id()]
     
-    def get_know_devices(self):
-        return [device for device in self.devices if device.has_device_id()]
+    def get_know_devices(self, devices):
+        return [device for device in devices if device.has_device_id()]
 
-    def map_unknowns(self, devices, device_id_candidates):
-        self.devices = devices
+    def predict(self, input_devices, device_id_candidates):
+        devices = deepcopy(input_devices)
         # make a copy
         device_id_candidates = set([x for x in device_id_candidates])
-        unknown_devices = self.get_unknown_devices()
+        unknown_devices = self.get_unknown_devices(devices)
         while len(unknown_devices) > 0:
             device_to_map = unknown_devices[0]
             ref_position = device_to_map.position
             # Find know near devices
             edges_space = []
-            for device in self.get_know_devices():
+            for device in self.get_know_devices(devices):
                 dist = ((device.position[0] - ref_position[0])**2 + (device.position[1] - ref_position[1])**2)**0.5
                 edges_space.append([device, dist])
             near_devices = sorted(edges_space, key=lambda x:x[1])[:self.top_near_size]        
@@ -85,7 +148,8 @@ class ModelGreedCached:
             # Remove mapped id from candidates
             device_id_candidates = device_id_candidates - {best_id}
             # Update list of unknown
-            unknown_devices = self.get_unknown_devices()
+            unknown_devices = self.get_unknown_devices(devices)
+        return devices
 
     def _calculate_similarity(self, ref_decide_id, candidate_device_id):
         return pearsonr(self.series[ref_decide_id].values, self.series[candidate_device_id].values)[0]

@@ -1,17 +1,16 @@
+from copy import deepcopy
 import pandas as pd
 from scipy.stats.stats import pearsonr
 
 
 class ModelGreed:
 
-    def __init__(self, devices, time_resolution='10s', top_near_size=3):
-        self.devices = devices
+    def __init__(self, time_resolution='10s', top_near_size=3):
         self.time_resolution = time_resolution
         self.top_near_size = top_near_size
         self.series = None
 
     def fit(self, df_events):
-        
         df = df_events.copy()
         df.timestamp = df.timestamp.dt.floor(self.time_resolution)
         min_time = df.timestamp.min()
@@ -25,22 +24,23 @@ class ModelGreed:
             self.series[device_id] = 0
             self.series[device_id].loc[_events] = 1
 
-    def get_unknown_devices(self):
-        return [device for device in self.devices if not device.has_device_id()]
+    def get_unknown_devices(self, devices):
+        return [device for device in devices if not device.has_device_id()]
     
-    def get_know_devices(self):
-        return [device for device in self.devices if device.has_device_id()]
+    def get_know_devices(self, devices):
+        return [device for device in devices if device.has_device_id()]
 
-    def map_unknowns(self, device_id_candidates):
+    def predict(self, input_devices, device_id_candidates):
+        devices = deepcopy(input_devices)
         # make a copy
         device_id_candidates = set([x for x in device_id_candidates])
-        unknown_devices = self.get_unknown_devices()
+        unknown_devices = self.get_unknown_devices(devices)
         while len(unknown_devices) > 0:
             device_to_map = unknown_devices[0]
             ref_position = device_to_map.position
             # Find know near devices
             edges_space = []
-            for device in self.get_know_devices():
+            for device in self.get_know_devices(device):
                 dist = ((device.position[0] - ref_position[0])**2 + (device.position[1] - ref_position[1])**2)**0.5
                 edges_space.append([device, dist])
             near_devices = sorted(edges_space, key=lambda x:x[1])[:self.top_near_size]        
@@ -61,7 +61,8 @@ class ModelGreed:
             # Remove mapped id from candidates
             device_id_candidates = device_id_candidates - {best_id}
             # Update list of unknown
-            unknown_devices = self.get_unknown_devices()
+            unknown_devices = self.get_unknown_devices(devices)
+        return devices
 
     def _calculate_similarity(self, ref_decide_id, candidate_device_id):
         return pearsonr(self.series[ref_decide_id].values, self.series[candidate_device_id].values)[0]
