@@ -1,4 +1,5 @@
 import io
+import traceback
 
 from flask import Flask
 from flask import send_file
@@ -66,39 +67,6 @@ def checked_id(real_device_id, device_id):
     return jsonify({})
 
 
-@app.route("/load_model_database")
-def load_model_database():
-    site_name = memory_database['current_site']
-    
-    return jsonify({})
-
-
-@app.route("/model_predict")
-def model_predict():
-    model = memory_database['model']
-    print(">>>> model: ", model)
-    
-    devices = []
-    df_positions = load_device_position(configuration.DATA_PATH, memory_database['current_site'])
-    device_id_list = sorted(df_positions.deviceid.unique())
-    known_devices = set(memory_database['devices'].values())
-
-    for device_id in device_id_list:
-        point = df_positions.loc[device_id]
-        position = [point.x, point.y]
-        _device = Device(position=position, device_id=None)    
-        if device_id in known_devices:
-            # Add as known device
-            _device.set_device_id(device_id)
-        devices.append(_device)
-
-    for device in devices:
-        print(device)
-
-    # model.predict(devices, test_devices_list)    
-    return jsonify({})
-
-
 def _build_device_list(known_devices):
     devices = []
     df_positions = load_device_position(configuration.DATA_PATH, memory_database['current_site'])
@@ -113,14 +81,16 @@ def _build_device_list(known_devices):
         devices.append(_device)
     return devices
 
+
 def _build_fallback_recommendations(real_device_id):
+    real_device_id = int(real_device_id)
     mapped_devices = []
     if memory_database['devices'].get(real_device_id, None) is None:
         df_positions = load_device_position(configuration.DATA_PATH, memory_database['current_site'])
-        all_devices = set(df_positions.deviceid.unique())
-        known_devices = set(memory_database['devices'].values())
+        all_devices = set([int(x) for x in df_positions.deviceid.unique()])
+        known_devices = set([int(x) for x in memory_database['devices'].values()])
         candidates = sorted(all_devices - known_devices)
-        mapped_devices = [int(x) for x in candidates[:6]] + [real_device_id]
+        mapped_devices = [int(x) for x in candidates[:4]] + [real_device_id]
     return mapped_devices
 
 
@@ -128,23 +98,32 @@ def _build_fallback_recommendations(real_device_id):
 def recommendations(real_device_id):
     real_device_id = int(real_device_id)
     known_devices = set(memory_database['devices'].values())
+    strategy = None
+
     if len(known_devices) == 0:
         print("..... getting fallback recommendations ...")
         mapped_devices = _build_fallback_recommendations(real_device_id)
+        strategy = "fallback"
     else:
         print("..... getting model recommendations ...")
         df_positions = load_device_position(configuration.DATA_PATH, memory_database['current_site'])
         all_devices = set(df_positions.deviceid.unique())
         candidates = sorted(all_devices - known_devices)
         devices = _build_device_list(known_devices)
-        model = memory_database['model']
-        model_devices = model.predict(devices, candidates)
-        mapped_devices = [int(x.device_id) for x in model_devices[:6]]
-        if real_device_id not in mapped_devices:
-            mapped_devices = mapped_devices[:5] + [real_device_id]
+        try:
+            model = memory_database['model']
+            model_devices = model.predict(devices, candidates)
+            mapped_devices = [int(x.device_id) for x in model_devices[:6]]
+            if real_device_id not in mapped_devices:
+                mapped_devices = mapped_devices[:4] + [real_device_id]
+            strategy = "model"
+        except Exception as e:
+            print(f"..... something went wrong ...")
+            print("..... getting fallback recommendations ...")
+            mapped_devices = _build_fallback_recommendations(real_device_id)
+            strategy = "error_fallback"
 
-    return jsonify({'recommender': mapped_devices})
-
+    return jsonify({'recommender': mapped_devices, 'strategy': strategy})
 
 
 @app.route("/tiles/<z>/<x>/<y>")
@@ -221,5 +200,4 @@ if __name__ == '__main__':
     print("------------------------------------------")
     print("- Lumen Loop 3.0 ")
     print("------------------------------------------")
-    app.run(host='127.0.0.1', port=8080, debug=True)
-    # app.run(host='0.0.0.0', port=8080, debug=False)
+    app.run(host='127.0.0.1', port=8080, debug=configuration.DEBUG)

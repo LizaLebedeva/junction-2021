@@ -64,7 +64,7 @@ function add_devices(){
                 circles.push(circle);
                 // Bind recommender
                 var pop_template = "<b>Device ID: " + device_id + "</b>";
-                pop_template += "<br/><br/><div id="+real_device_id+"></div><br/>";
+                pop_template += "<br/><br/><div id="+real_device_id+"></div>";
                 pop_template += "<i>real device id: " + real_device_id + "</i>";
                 circle.bindPopup(pop_template, {minWidth : 400});
             }
@@ -107,6 +107,7 @@ $(function() {
             async: true,
             success: function(resp) {
                 var recommender = resp.recommender;
+                var strategy = resp.strategy;
                 var recs_block = "<table border='0' width='100%' cellspacing='5' cellpadding='5'>";
                 for (var k=0; k < recommender.length; k++) {
                     var device_id = recommender[k];
@@ -114,9 +115,10 @@ $(function() {
                     recs_block += "<td> <b>Device: "+device_id+"</b> </td>";
                     recs_block += "<td><button style='background-color: #f0f0ff;'>Check</button></td>";
                     recs_block += "<td><button onclick='confirm_recommendation("+real_device_id+","+device_id+");' style='background-color: #a0ffa0;'>Confirm</button></td>";
-                    recs_block += "</tr>"
+                    recs_block += "</tr>";
                 }
-                recs_block += "</table>"
+                recs_block += "</table><br/>";
+                recs_block += "<i>strategy: "+strategy+"</i>";
                 $("#"+real_device_id).html(recs_block);
             }
         });
