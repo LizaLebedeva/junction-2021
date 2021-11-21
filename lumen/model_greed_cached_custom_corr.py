@@ -147,11 +147,7 @@ class ModelGreedCachedCustomCorrelation:
         return dict_key
 
     def get_correlation(self, device1, device2):
-        key = self.get_dict_key_for_cache_from_ids(device1, device2)
-        if key in self.cache:
-            return self.cache[key]
-        else 
-            return 0
+        return self.cache[self.get_dict_key_for_cache_from_ids(device1, device2)]        
 
     def fit(self, df_events):
         self.compute_correlations(df_events.deviceid.unique())
