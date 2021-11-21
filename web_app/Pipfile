@@ -8,6 +8,7 @@ flask = "*"
 flask-caching = "*"
 pillow = "*"
 pandas = "*"
+scipy = "*"
 
 [dev-packages]
 
