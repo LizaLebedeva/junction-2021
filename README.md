@@ -5,5 +5,6 @@ Airtag meets intelligent ligthing: find all your sensors without any additional 
 Making sense of sensors data: our solution allows to optimize sensors' maintenance cost. Using graph models we can identify points in system of sensors where to look to find the rest of them.
 
 
+# Demo
 ![Demo Image](https://github.com/LizaLebedeva/junction-2021/blob/master/lumen_loop_site_1.png)
 
